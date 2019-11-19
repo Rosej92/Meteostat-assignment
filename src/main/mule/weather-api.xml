@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="9d61dd3f-ec33-45fc-a888-045629b16cbc" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="4f32a143-9f07-48ef-b06a-20b83167ed5d" >
+		<http:request-connection host="api.meteostat.net" protocol="HTTPS"/>
+	</http:request-config>
+	<http:request-config name="HTTP_Request_configuration1" doc:name="HTTP Request configuration" doc:id="63644820-c85e-4764-b9b8-9d3c95ef1cde" >
+		<http:request-connection protocol="HTTPS" host="api.meteostat.net"/>
+	</http:request-config>
+	<http:request-config name="HTTP_Request_configuration2" doc:name="HTTP Request configuration" doc:id="c3c96f08-a12d-4160-85c9-5bc8d57cf9c5" >
+		<http:request-connection protocol="HTTPS" host="api.meteostat.net" />
+	</http:request-config>
+	<flow name="weather-apiFlow" doc:id="2a0274a9-5064-46da-b54f-7b2cdbad9095" >
+		<http:listener doc:name="Listener" doc:id="35af551c-e9e9-4a3a-9799-ae8d124fb35c" path="/weather" config-ref="HTTP_Listener_config"/>
+		<set-variable value="#[attributes.queryParams.temp]" doc:name="Set Variable" doc:id="628dcaa1-1c43-4ee9-ab02-7a56ed7e42d3" variableName="temp"/>
+		<set-variable value="#[attributes]" doc:name="Set Variable" doc:id="bd54efb1-df72-4a3b-a138-5d0ac149c3f7" variableName="attributes"/>
+		<http:request method="GET" doc:name="Request" doc:id="acba03aa-7856-4d56-a45f-bccb109227d9" config-ref="HTTP_Request_configuration" path="/v1/history/daily">
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	'end' : attributes.queryParams.end,
+	'key' : attributes.queryParams.key,
+	'station' : "10637",
+	'start' : attributes.queryParams.start
+}]]]></http:query-params>
+		</http:request>
+		<choice doc:name="Choice" doc:id="039a0aa8-1506-4a5e-82aa-9bd7ff342002" >
+			<when expression="#[vars.temp == 'yearly']">
+				<ee:transform doc:name="Transform Message" doc:id="c786e80b-b390-4bb7-85dc-31fa54855d6a">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</when>
+			<when expression="#[vars.temp == 'maxTemp']">
+				<flow-ref doc:name="Flow Reference" doc:id="3e7f4887-c9e4-46c6-ab42-a27ca8090494" name="max-Temp-Flow"/>
+			</when>
+		</choice>
+	</flow>
+	<flow name="max-Temp-Flow" doc:id="4a642c98-5506-4048-9cdc-95f2cdae22e8" >
+		<http:listener doc:name="Listener" doc:id="c1359980-7e22-4dbe-a609-e7112fbf48c0" config-ref="HTTP_Listener_config" path="/max"/>
+		<http:request method="GET" doc:name="Request" doc:id="3fb79d47-cbdc-46eb-8775-0bd286e21fe7" path="/v1/history/daily" config-ref="HTTP_Request_configuration1">
+			<http:query-params><![CDATA[#[output application/java
+---
+{
+	'end' : vars.attributes.queryParams.end,
+	'key' : vars.attributes.queryParams.key,
+	'station' : "10637",
+	'start' : vars.attributes.queryParams.start
+}]]]></http:query-params>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="4b0b86ed-b499-4f12-b135-5122f0b85149">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Max Temperature is ": max (payload.data..temperature_max)
+
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="percep-monthly-Flow" doc:id="46c329c4-40bb-447f-8366-8381af683709" >
+		<http:listener doc:name="Listener" doc:id="83eed16f-2330-43f8-a7e3-8742b099a209" config-ref="HTTP_Listener_config" path="/avg"/>
+		<http:request method="GET" doc:name="Request" doc:id="a20b17b8-7200-4336-ad37-9fe4f80dcf6f" config-ref="HTTP_Request_configuration2" path="v1/history/daily">
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	'end' : attributes.queryParams.end,
+	'key' : attributes.queryParams.key,
+	'station' : "10637",
+	'start' : attributes.queryParams.start
+}]]]></http:query-params>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="23d05a2c-ac9d-4b30-b600-45d48a5d0f09" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+fun getMonth(mon) = (mon splitBy "-")[1]
+
+---
+{
+  
+   "Average Percipitation": (payload.data groupBy ((item, index) -> getMonth(item.date))) mapObject  
+   ({
+    'Month $$$': avg($[?(payload.data.precipitation != null)] map $.precipitation)
+   })
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
